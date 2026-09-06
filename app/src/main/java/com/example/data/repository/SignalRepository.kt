@@ -7,19 +7,23 @@ import com.example.data.model.OptionType
 import com.example.data.model.SetupType
 import com.example.data.model.SignalStatus
 import com.example.data.model.TradeSignal
+import com.example.data.market.LiveMarketSnapshot
+import com.example.data.market.UpstoxMarketData
+import com.example.data.scanner.FnoStock
+import com.example.data.scanner.StockUniverse
 import com.example.data.scanner.OptionsScannerEngine
 import com.example.data.telegram.TelegramManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 
 class SignalRepository(private val context: Context) {
 
     private val db = AppDatabase.getInstance(context)
     private val signalDao = db.signalDao()
     val telegramManager = TelegramManager(context)
+    val upstoxMarketData = UpstoxMarketData(context)
 
     val allSignals: Flow<List<TradeSignal>> = signalDao.getAllSignals().map { list ->
         list.map { it.toDomain() }
@@ -33,19 +37,25 @@ class SignalRepository(private val context: Context) {
         list.map { it.toDomain() }
     }
 
-    suspend fun populateInitialDataIfEmpty() = withContext(Dispatchers.IO) {
-        if (signalDao.getCount() == 0) {
-            val generated = OptionsScannerEngine.scanUniverse(minConfidence = 86)
-            val entities = generated.map { SignalEntity.fromDomain(it) }
-            signalDao.insertSignals(entities)
+    suspend fun prepareLiveDataMode() = withContext(Dispatchers.IO) {
+        val prefs = context.getSharedPreferences("data_migrations", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("removed_mock_seed_v1", false)) {
+            signalDao.clearAllSignals()
+            prefs.edit().putBoolean("removed_mock_seed_v1", true).apply()
         }
     }
 
+    suspend fun fetchLiveMarket(): LiveMarketSnapshot = upstoxMarketData.fetchSnapshot(StockUniverse.STOCKS)
+
     suspend fun runFullScanAndSave(minConfidence: Int = 85): List<TradeSignal> = withContext(Dispatchers.IO) {
-        val detected = OptionsScannerEngine.scanUniverse(minConfidence = minConfidence)
+        val live = fetchLiveMarket()
+        val detected = OptionsScannerEngine.scanUniverse(live.stocks, minConfidence = minConfidence)
         val savedSignals = mutableListOf<TradeSignal>()
 
-        for (sig in detected) {
+        // Keep API usage bounded and alert only the strongest setups per cycle.
+        for (raw in detected.take(5)) {
+            val key = live.stocks.first { it.symbol == raw.symbol }.instrumentKey
+            val sig = upstoxMarketData.attachLiveOptionPrice(raw, key)
             val id = signalDao.insertSignal(SignalEntity.fromDomain(sig))
             val savedSignal = sig.copy(id = id)
             savedSignals.add(savedSignal)
@@ -61,8 +71,10 @@ class SignalRepository(private val context: Context) {
         savedSignals
     }
 
-    suspend fun triggerInstantAlert(setupType: SetupType? = null): TradeSignal = withContext(Dispatchers.IO) {
-        val signal = OptionsScannerEngine.generateInstantSignal(setupType)
+    suspend fun triggerInstantAlert(setupType: SetupType? = null, stocks: List<FnoStock>? = null): TradeSignal = withContext(Dispatchers.IO) {
+        val liveStocks = stocks ?: fetchLiveMarket().stocks
+        val raw = OptionsScannerEngine.generateInstantSignal(liveStocks, setupType)
+        val signal = upstoxMarketData.attachLiveOptionPrice(raw, liveStocks.first { it.symbol == raw.symbol }.instrumentKey)
         val id = signalDao.insertSignal(SignalEntity.fromDomain(signal))
         val saved = signal.copy(id = id)
 

@@ -11,7 +11,6 @@ import com.example.data.repository.SignalRepository
 import com.example.data.scanner.FnoStock
 import com.example.data.scanner.StockUniverse
 import com.example.service.ScannerForegroundService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +23,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 enum class AppTab {
     INTRADAY,
@@ -35,21 +33,22 @@ enum class AppTab {
 }
 
 data class MarketIndices(
-    val niftySpot: Double = 24855.40,
-    val niftyChange: Double = 142.30,
-    val niftyChangePercent: Double = 0.58,
-    val bankNiftySpot: Double = 51240.80,
-    val bankNiftyChange: Double = 318.50,
-    val bankNiftyChangePercent: Double = 0.63,
-    val pcr: Double = 1.24,
-    val fiiNetFlowCr: Double = 2640.0,
-    val isMarketOpen: Boolean = true
+    val niftySpot: Double = 0.0,
+    val niftyChange: Double = 0.0,
+    val niftyChangePercent: Double = 0.0,
+    val bankNiftySpot: Double = 0.0,
+    val bankNiftyChange: Double = 0.0,
+    val bankNiftyChangePercent: Double = 0.0,
+    val pcr: Double = 0.0,
+    val fiiNetFlowCr: Double = 0.0,
+    val isMarketOpen: Boolean = false
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SignalRepository(application)
     val telegramManager = repository.telegramManager
+    val upstoxMarketData = repository.upstoxMarketData
 
     private val _selectedTab = MutableStateFlow(AppTab.INTRADAY)
     val selectedTab: StateFlow<AppTab> = _selectedTab.asStateFlow()
@@ -66,6 +65,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _telegramStatusMessage = MutableStateFlow<String?>(null)
     val telegramStatusMessage: StateFlow<String?> = _telegramStatusMessage.asStateFlow()
 
+    private val _upstoxStatusMessage = MutableStateFlow<String?>(null)
+    val upstoxStatusMessage: StateFlow<String?> = _upstoxStatusMessage.asStateFlow()
+
+    private val _isLiveMarketConnected = MutableStateFlow(false)
+    val isLiveMarketConnected: StateFlow<Boolean> = _isLiveMarketConnected.asStateFlow()
+
     private val _snackbarEvent = MutableSharedFlow<String>()
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
 
@@ -73,7 +78,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val selectedSignalForCalculator: StateFlow<TradeSignal?> = _selectedSignalForCalculator.asStateFlow()
 
     // F&O Stock Radar list
-    val fnoUniverse: List<FnoStock> = StockUniverse.STOCKS
+    private val _fnoUniverse = MutableStateFlow(StockUniverse.STOCKS)
+    val fnoUniverse: StateFlow<List<FnoStock>> = _fnoUniverse.asStateFlow()
 
     val allSignals: StateFlow<List<TradeSignal>> = repository.allSignals
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -95,32 +101,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            repository.populateInitialDataIfEmpty()
+            repository.prepareLiveDataMode()
         }
 
-        // Live market tick simulation for realistic trading terminal dynamics
-        viewModelScope.launch(Dispatchers.Default) {
+        // Pull exchange-backed Upstox quotes; never fabricate ticks.
+        viewModelScope.launch {
             while (isActive) {
-                delay(3000)
-                updateMarketTicks()
+                if (upstoxMarketData.isConfigured) refreshLiveMarket(silent = true)
+                delay(15_000)
             }
         }
     }
 
-    private fun updateMarketTicks() {
-        val current = _marketIndices.value
-        val deltaNifty = (Random.nextDouble(-1.5, 2.2) * 10).toInt() / 10.0
-        val deltaBank = (Random.nextDouble(-3.0, 4.5) * 10).toInt() / 10.0
-
-        val newNifty = (current.niftySpot + deltaNifty)
-        val newBank = (current.bankNiftySpot + deltaBank)
-
-        _marketIndices.value = current.copy(
-            niftySpot = newNifty,
-            niftyChange = current.niftyChange + deltaNifty,
-            bankNiftySpot = newBank,
-            bankNiftyChange = current.bankNiftyChange + deltaBank
-        )
+    private suspend fun refreshLiveMarket(silent: Boolean = false): Boolean {
+        return runCatching { repository.fetchLiveMarket() }.fold({ snapshot ->
+            _fnoUniverse.value = snapshot.stocks
+            val n = snapshot.nifty
+            val b = snapshot.bankNifty
+            _marketIndices.value = _marketIndices.value.copy(
+                niftySpot = n?.lastPrice ?: 0.0, niftyChange = n?.change ?: 0.0,
+                niftyChangePercent = n?.changePercent ?: 0.0,
+                bankNiftySpot = b?.lastPrice ?: 0.0, bankNiftyChange = b?.change ?: 0.0,
+                bankNiftyChangePercent = b?.changePercent ?: 0.0
+            )
+            _isLiveMarketConnected.value = true
+            _upstoxStatusMessage.value = "✅ LIVE Upstox market data connected"
+            true
+        }, { error ->
+            _isLiveMarketConnected.value = false
+            _upstoxStatusMessage.value = "❌ ${error.localizedMessage}"
+            if (!silent) _snackbarEvent.emit("Upstox: ${error.localizedMessage}")
+            false
+        })
     }
 
     fun selectTab(tab: AppTab) {
@@ -139,6 +151,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _snackbarEvent.emit("Background Scanner Stopped")
             }
         } else {
+            if (!upstoxMarketData.isConfigured) {
+                viewModelScope.launch { _snackbarEvent.emit("Save an Upstox access token before starting live background scanning.") }
+                return
+            }
             ScannerForegroundService.start(context)
             viewModelScope.launch {
                 _snackbarEvent.emit("Background Scanner Started! Running in background & minimized.")
@@ -150,12 +166,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isScanning.value = true
             try {
-                val newSignal = repository.triggerInstantAlert(setupType)
+                if (!refreshLiveMarket()) return@launch
+                val newSignal = repository.triggerInstantAlert(setupType, _fnoUniverse.value)
                 _snackbarEvent.emit("Found setup: ${newSignal.symbol} ${newSignal.strikePrice.toInt()} ${newSignal.optionType} (${newSignal.setupType})")
             } catch (e: Exception) {
                 _snackbarEvent.emit("Scan error: ${e.localizedMessage}")
             } finally {
                 _isScanning.value = false
+            }
+        }
+    }
+
+    fun saveUpstoxToken(token: String) {
+        upstoxMarketData.accessToken = token
+        viewModelScope.launch {
+            _upstoxStatusMessage.value = "Testing Upstox connection..."
+            refreshLiveMarket()
+        }
+    }
+
+    fun testUpstoxConnection() {
+        viewModelScope.launch {
+            _upstoxStatusMessage.value = "Testing Upstox connection..."
+            upstoxMarketData.testConnection().onSuccess { message ->
+                _upstoxStatusMessage.value = "✅ $message"
+                refreshLiveMarket(silent = true)
+            }.onFailure { error ->
+                _isLiveMarketConnected.value = false
+                _upstoxStatusMessage.value = "❌ ${error.localizedMessage}"
             }
         }
     }

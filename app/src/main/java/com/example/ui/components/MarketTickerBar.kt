@@ -61,6 +61,7 @@ import java.util.Locale
 @Composable
 fun MarketTickerBar(
     indices: MarketIndices,
+    isLiveMarketConnected: Boolean,
     isBackgroundRunning: Boolean,
     onToggleBackground: () -> Unit,
     modifier: Modifier = Modifier
@@ -109,7 +110,7 @@ fun MarketTickerBar(
                             letterSpacing = 0.5.sp
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            val dotColor = if (isBackgroundRunning) CallGreen else GoldAccent
+                            val dotColor = if (isLiveMarketConnected) CallGreen else PutRed
                             val transition = rememberInfiniteTransition(label = "pulse")
                             val pulseScale by transition.animateFloat(
                                 initialValue = 0.8f,
@@ -130,8 +131,8 @@ fun MarketTickerBar(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (isBackgroundRunning) "Background Scanning Active" else "Foreground Mode",
-                                color = if (isBackgroundRunning) CallGreen else TextMuted,
+                                text = if (isLiveMarketConnected) "LIVE • Upstox" else "OFFLINE • Configure Upstox",
+                                color = if (isLiveMarketConnected) CallGreen else PutRed,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -180,14 +181,14 @@ fun MarketTickerBar(
                 IndexChip(
                     name = "NIFTY",
                     value = String.format(Locale.US, "%,.1f", indices.niftySpot),
-                    change = "+${String.format(Locale.US, "%.1f", indices.niftyChange)} (${String.format(Locale.US, "%.2f", indices.niftyChangePercent)}%)",
+                    change = "${if (indices.niftyChange >= 0) "+" else ""}${String.format(Locale.US, "%.1f", indices.niftyChange)} (${String.format(Locale.US, "%.2f", indices.niftyChangePercent)}%)",
                     isPositive = indices.niftyChange >= 0,
                     modifier = Modifier.weight(1f)
                 )
                 IndexChip(
                     name = "BANKNIFTY",
                     value = String.format(Locale.US, "%,.1f", indices.bankNiftySpot),
-                    change = "+${String.format(Locale.US, "%.1f", indices.bankNiftyChange)} (${String.format(Locale.US, "%.2f", indices.bankNiftyChangePercent)}%)",
+                    change = "${if (indices.bankNiftyChange >= 0) "+" else ""}${String.format(Locale.US, "%.1f", indices.bankNiftyChange)} (${String.format(Locale.US, "%.2f", indices.bankNiftyChangePercent)}%)",
                     isPositive = indices.bankNiftyChange >= 0,
                     modifier = Modifier.weight(1f)
                 )

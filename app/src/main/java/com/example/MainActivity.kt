@@ -85,6 +85,9 @@ fun MainAppScreen(viewModel: MainViewModel) {
     val optionFilter by viewModel.optionTypeFilter.collectAsStateWithLifecycle()
     val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
     val marketIndices by viewModel.marketIndices.collectAsStateWithLifecycle()
+    val fnoUniverse by viewModel.fnoUniverse.collectAsStateWithLifecycle()
+    val upstoxStatus by viewModel.upstoxStatusMessage.collectAsStateWithLifecycle()
+    val isLiveMarketConnected by viewModel.isLiveMarketConnected.collectAsStateWithLifecycle()
     val intradaySignals by viewModel.intradaySignals.collectAsStateWithLifecycle()
     val positionalSignals by viewModel.positionalSignals.collectAsStateWithLifecycle()
     val allSignals by viewModel.allSignals.collectAsStateWithLifecycle()
@@ -116,6 +119,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
         topBar = {
             MarketTickerBar(
                 indices = marketIndices,
+                isLiveMarketConnected = isLiveMarketConnected,
                 isBackgroundRunning = isBgRunning,
                 onToggleBackground = { viewModel.toggleBackgroundService() }
             )
@@ -163,13 +167,17 @@ fun MainAppScreen(viewModel: MainViewModel) {
                 }
                 AppTab.SCANNER -> {
                     ScannerRadarScreen(
-                        stocks = viewModel.fnoUniverse,
+                        stocks = fnoUniverse,
                         onTriggerScanForStock = { setupType -> viewModel.triggerScanNow(setupType) }
                     )
                 }
                 AppTab.TELEGRAM -> {
                     TelegramSettingsScreen(
                         telegramManager = viewModel.telegramManager,
+                        upstoxMarketData = viewModel.upstoxMarketData,
+                        upstoxStatusMessage = upstoxStatus,
+                        onSaveUpstoxToken = { viewModel.saveUpstoxToken(it) },
+                        onTestUpstoxConnection = { viewModel.testUpstoxConnection() },
                         isBackgroundRunning = isBgRunning,
                         onToggleBackground = { viewModel.toggleBackgroundService() },
                         statusMessage = telegramStatus,
@@ -284,4 +292,3 @@ fun AppBottomNav(
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(text = "Hello $name!", modifier = modifier)
 }
-

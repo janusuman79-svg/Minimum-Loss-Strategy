@@ -47,9 +47,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.telegram.TelegramManager
+import com.example.data.market.UpstoxMarketData
 import com.example.ui.theme.BluePositional
 import com.example.ui.theme.BluePositionalContainer
 import com.example.ui.theme.CallGreen
@@ -65,6 +67,10 @@ import com.example.ui.theme.TextSecondary
 @Composable
 fun TelegramSettingsScreen(
     telegramManager: TelegramManager,
+    upstoxMarketData: UpstoxMarketData,
+    upstoxStatusMessage: String?,
+    onSaveUpstoxToken: (String) -> Unit,
+    onTestUpstoxConnection: () -> Unit,
     isBackgroundRunning: Boolean,
     onToggleBackground: () -> Unit,
     statusMessage: String?,
@@ -72,6 +78,7 @@ fun TelegramSettingsScreen(
     onTestConnection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var upstoxToken by remember { mutableStateOf(upstoxMarketData.accessToken) }
     var botToken by remember { mutableStateOf(telegramManager.botToken) }
     var chatId by remember { mutableStateOf(telegramManager.chatId) }
     var autoSend by remember { mutableStateOf(telegramManager.isAutoSendEnabled) }
@@ -84,6 +91,60 @@ fun TelegramSettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            Box(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(SurfaceDark)
+                    .border(1.dp, CallGreen.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Shield, contentDescription = null, tint = CallGreen)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("Upstox Live Market Data", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Exchange-backed spot and option LTP • read-only", color = TextMuted, fontSize = 11.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    OutlinedTextField(
+                        value = upstoxToken,
+                        onValueChange = { upstoxToken = it },
+                        label = { Text("Upstox Access Token") },
+                        placeholder = { Text("Paste today's access token") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("upstox_token_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CallGreen, unfocusedBorderColor = SurfaceBorderDark,
+                            focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ElevatedButton(
+                            onClick = { onSaveUpstoxToken(upstoxToken) },
+                            modifier = Modifier.weight(1f).testTag("save_upstox_token_button"),
+                            colors = ButtonDefaults.elevatedButtonColors(containerColor = CallGreen, contentColor = Color.Black)
+                        ) { Text("Save & Fetch", fontWeight = FontWeight.Bold) }
+                        ElevatedButton(
+                            onClick = onTestUpstoxConnection,
+                            modifier = Modifier.weight(1f).testTag("test_upstox_button"),
+                            colors = ButtonDefaults.elevatedButtonColors(containerColor = SurfaceElevatedDark, contentColor = TextPrimary)
+                        ) { Text("Test", fontWeight = FontWeight.Bold) }
+                    }
+                    if (upstoxStatusMessage != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(upstoxStatusMessage, color = if (upstoxStatusMessage.startsWith("✅")) CallGreen else PutRed, fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Tokens normally expire according to Upstox policy. The app never places orders; refresh stops instead of showing invented prices when the token is missing or invalid.", color = TextSecondary, fontSize = 10.sp, lineHeight = 14.sp)
+                }
+            }
+        }
+
         // Background Service Status & Control Card
         item {
             Box(

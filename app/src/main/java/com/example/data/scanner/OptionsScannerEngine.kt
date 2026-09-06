@@ -7,7 +7,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 object OptionsScannerEngine {
 
@@ -318,7 +317,8 @@ object OptionsScannerEngine {
 
         val premiumBaseFactor = if (stock.category == "Index") 0.009 else 0.022
         val roughBase = spot * premiumBaseFactor
-        val entry = roundToTick((roughBase * (1.0 + Random.nextDouble(-0.03, 0.03))).coerceAtLeast(15.0))
+        // Temporary value used only until the repository attaches the live Upstox option LTP.
+        val entry = roundToTick(roughBase.coerceAtLeast(15.0))
 
         // Tight Micro-SL: < 5% risk for Intraday (e.g. 4.2%), ~10% for Positional
         val slPercent = if (setupType == SetupType.INTRADAY) 0.044 else 0.105
@@ -463,11 +463,9 @@ object OptionsScannerEngine {
     /**
      * Generates a new live alert for demonstration / real-time testing
      */
-    fun generateInstantSignal(setupType: SetupType? = null): TradeSignal {
-        val stock = StockUniverse.STOCKS.random()
-        val optionType = if (stock.trend.contains("Bullish")) OptionType.CE else OptionType.PE
-        val chosenSetup = setupType ?: if (Random.nextBoolean()) SetupType.INTRADAY else SetupType.POSITIONAL
-        val breakdown = evaluateConfluence(stock, optionType)
-        return buildSignal(stock, optionType, chosenSetup, breakdown)
+    fun generateInstantSignal(stocks: List<FnoStock>, setupType: SetupType? = null): TradeSignal {
+        val chosenSetup = setupType ?: SetupType.INTRADAY
+        return scanUniverse(stocks, chosenSetup, minConfidence = 0).firstOrNull()
+            ?: error("No qualifying live-market setup found")
     }
 }

@@ -3,6 +3,7 @@ package com.example.data.scanner
 data class FnoStock(
     val symbol: String,
     val name: String,
+    val instrumentKey: String = UpstoxInstruments.keyFor(symbol),
     val spotPrice: Double,
     val strikeStep: Double,
     val lotSize: Int,
@@ -32,6 +33,24 @@ data class FnoStock(
     val orderBookDeltaPercent: Double = 35.0, // Bid vs Ask quantity imbalance %
     val candlestickPattern: String = "15m ORB Breakout"
 )
+
+object UpstoxInstruments {
+    const val NIFTY = "NSE_INDEX|Nifty 50"
+    const val BANK_NIFTY = "NSE_INDEX|Nifty Bank"
+    private val keys = mapOf(
+        "NIFTY" to NIFTY,
+        "BANKNIFTY" to BANK_NIFTY,
+        "FINNIFTY" to "NSE_INDEX|Nifty Fin Service",
+        "RELIANCE" to "NSE_EQ|INE002A01018", "HDFCBANK" to "NSE_EQ|INE040A01034",
+        "ICICIBANK" to "NSE_EQ|INE090A01021", "INFY" to "NSE_EQ|INE009A01021",
+        "TCS" to "NSE_EQ|INE467B01029", "TATAMOTORS" to "NSE_EQ|INE155A01022",
+        "SBIN" to "NSE_EQ|INE062A01020", "TATASTEEL" to "NSE_EQ|INE081A01020",
+        "BHARTIARTL" to "NSE_EQ|INE397D01024", "BAJFINANCE" to "NSE_EQ|INE296A01024",
+        "AXISBANK" to "NSE_EQ|INE238A01034", "MARUTI" to "NSE_EQ|INE585B01010",
+        "SUNPHARMA" to "NSE_EQ|INE044A01036"
+    )
+    fun keyFor(symbol: String): String = keys[symbol] ?: error("No Upstox instrument key for $symbol")
+}
 
 object StockUniverse {
     val STOCKS = listOf(
@@ -453,4 +472,3 @@ object StockUniverse {
         )
     )
 }
-
