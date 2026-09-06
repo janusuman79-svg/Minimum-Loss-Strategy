@@ -1,0 +1,6 @@
+{
+  "name": "NSE F&O Options Scanner",
+  "description": "Live NSE stock options CE/PE signals with low-SL scanner, background alerts, and separate Intraday & Positional setups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

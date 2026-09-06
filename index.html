@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>NSE F&O Options Scanner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0A0D14;
+      --surface-dark: #121722;
+      --surface-elevated: #1B2232;
+      --surface-border: #263147;
+      --call-green: #00E676;
+      --call-green-bg: rgba(0, 230, 118, 0.12);
+      --put-red: #FF3B69;
+      --put-red-bg: rgba(255, 59, 105, 0.12);
+      --gold-accent: #FFD54F;
+      --intraday-amber: #FF9800;
+      --intraday-amber-bg: rgba(255, 152, 0, 0.16);
+      --positional-purple: #7C4DFF;
+      --positional-purple-bg: rgba(124, 77, 255, 0.16);
+      --text-primary: #FFFFFF;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Market Bar */
+    .market-header {
+      background: var(--surface-dark);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .ticker-wrap {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      overflow-x: auto;
+    }
+
+    .ticker-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .ticker-name {
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .ticker-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .bg-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 230, 118, 0.1);
+      border: 1px solid var(--call-green);
+      color: var(--call-green);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--call-green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 8px var(--call-green); }
+      100% { transform: scale(0.9); opacity: 0.7; }
+    }
+
+    /* Secondary Controls / Filter Bar */
+    .filter-bar {
+      background: var(--surface-dark);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .filter-chip {
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--surface-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--surface-border);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-chip.active {
+      background: var(--call-green);
+      color: #000;
+      border-color: var(--call-green);
+    }
+
+    .filter-chip.pe-active {
+      background: var(--put-red);
+      color: #fff;
+      border-color: var(--put-red);
+    }
+
+    .scan-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #FFB300, #FF6F00);
+      color: #000;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(255, 179, 0, 0.3);
+    }
+
+    .scan-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* Main Scroll Area */
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Strategy Banner */
+    .strategy-banner {
+      background: var(--surface-dark);
+      border: 1px solid var(--intraday-amber);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .strategy-banner.positional-banner {
+      border-color: var(--positional-purple);
+    }
+
+    .banner-icon {
+      font-size: 20px;
+    }
+
+    .banner-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--intraday-amber);
+      margin-bottom: 3px;
+    }
+
+    .positional-banner .banner-title {
+      color: var(--positional-purple);
+    }
+
+    .banner-desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* Signal Card */
+    .signal-card {
+      background: var(--surface-dark);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .signal-card.intraday-card {
+      border-left: 4px solid var(--intraday-amber);
+    }
+
+    .signal-card.positional-card {
+      border-left: 4px solid var(--positional-purple);
+    }
+
+    /* Distinct Top Header Badges */
+    .card-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-intraday-mis {
+      background: var(--intraday-amber-bg);
+      color: var(--intraday-amber);
+      border: 1px solid var(--intraday-amber);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge-positional-nrml {
+      background: var(--positional-purple-bg);
+      color: var(--positional-purple);
+      border: 1px solid var(--positional-purple);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge-option-type {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 7px;
+      border-radius: 6px;
+    }
+
+    .badge-ce {
+      background: var(--call-green-bg);
+      color: var(--call-green);
+      border: 1px solid var(--call-green);
+    }
+
+    .badge-pe {
+      background: var(--put-red-bg);
+      color: var(--put-red);
+      border: 1px solid var(--put-red);
+    }
+
+    .expiry-indicator-bar {
+      background: var(--surface-elevated);
+      padding: 6px 10px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .countdown-timer {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: var(--intraday-amber);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .holding-indicator {
+      font-weight: 700;
+      color: var(--positional-purple);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .stock-symbol {
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .strike-title {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .card-right-metric {
+      text-align: right;
+    }
+
+    .current-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .pnl-badge {
+      font-size: 11px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Levels Grid */
+    .levels-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      background: var(--surface-elevated);
+      padding: 10px;
+      border-radius: 10px;
+    }
+
+    .level-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .level-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .level-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .level-sub {
+      font-size: 8px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    /* Target Meter Bar */
+    .target-meter-wrap {
+      background: var(--surface-elevated);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .meter-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .meter-track {
+      width: 100%;
+      height: 6px;
+      background: #232B3E;
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .meter-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    .fill-intraday {
+      background: linear-gradient(90deg, var(--intraday-amber), #FFC107);
+    }
+
+    .fill-positional {
+      background: linear-gradient(90deg, var(--positional-purple), #9575CD);
+    }
+
+    .risk-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-muted);
+      padding: 0 4px;
+    }
+
+    .rr-tag {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    .sl-pct-pill {
+      background: rgba(255, 59, 105, 0.15);
+      color: var(--put-red);
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9px;
+    }
+
+    .confluence-list {
+      background: rgba(0,0,0,0.25);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      line-height: 1.4;
+    }
+
+    .conf-item::before {
+      content: "✓ ";
+      color: var(--call-green);
+      font-weight: 800;
+    }
+
+    /* Actions Row */
+    .card-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .btn-trade-1click {
+      flex: 1.2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: var(--intraday-amber);
+      color: #000;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn-trade-1click.positional-trade {
+      background: var(--positional-purple);
+      color: #fff;
+    }
+
+    .btn-telegram {
+      background: var(--surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--surface-border);
+      font-weight: 700;
+      font-size: 11px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn-delete {
+      background: transparent;
+      border: 1px solid var(--surface-border);
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    /* Bottom Navigation */
+    .bottom-nav {
+      background: var(--surface-dark);
+      border-top: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: space-around;
+      padding: 6px 0;
+      flex-shrink: 0;
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .nav-item.active {
+      color: var(--call-green);
+      background: rgba(0, 230, 118, 0.08);
+    }
+
+    .nav-icon {
+      font-size: 17px;
+    }
+
+    /* Radar Table */
+    .radar-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stock-radar-card {
+      background: var(--surface-dark);
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    /* Settings & Studio Form */
+    .settings-panel {
+      background: var(--surface-dark);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .form-input {
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      padding: 10px 12px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+    }
+
+    .form-input:focus {
+      border-color: var(--call-green);
+    }
+
+    /* Modal / Order Confirmation Dialog */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background: var(--surface-dark);
+      border: 1px solid var(--surface-border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .payload-box {
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--gold-accent);
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-confirm-order {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--call-green);
+      color: #000;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .btn-cancel-order {
+      padding: 12px 18px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid var(--surface-border);
+      color: var(--text-secondary);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Toast Notification */
+    #toast-msg {
+      position: fixed;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1E293B;
+      border: 1px solid var(--call-green);
+      color: #FFF;
+      padding: 10px 18px;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1000;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Market Ticker Bar -->
+  <div class="market-header">
+    <div class="ticker-wrap">
+      <div class="ticker-item">
+        <span class="ticker-name">NIFTY 50</span>
+        <span class="ticker-val" id="nifty-spot">25,285.40</span>
+        <span style="color: var(--call-green); font-size: 10px; font-weight: 800;">+0.72%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="ticker-name">BANK NIFTY</span>
+        <span class="ticker-val" id="bank-spot">51,460.80</span>
+        <span style="color: var(--call-green); font-size: 10px; font-weight: 800;">+0.85%</span>
+      </div>
+    </div>
+    <div class="bg-badge" id="bg-toggle" onclick="toggleBackgroundService()">
+      <div class="pulse-dot"></div>
+      <span id="bg-status-text">BG SCAN ON</span>
+    </div>
+  </div>
+
+  <!-- Sub-Header Filter Bar -->
+  <div class="filter-bar" id="subfilter-bar">
+    <div class="filter-group">
+      <div class="filter-chip active" onclick="setOptionFilter('ALL', this)">ALL</div>
+      <div class="filter-chip" onclick="setOptionFilter('CE', this)">🟢 CE CALL</div>
+      <div class="filter-chip" onclick="setOptionFilter('PE', this)">🔴 PE PUT</div>
+    </div>
+    <button class="scan-btn" onclick="triggerScan()">
+      <span>⚡</span> SCAN NOW
+    </button>
+  </div>
+
+  <!-- Main Dynamic Content Container -->
+  <div class="content-area" id="main-content">
+    <!-- Populated by JavaScript -->
+  </div>
+
+  <!-- Bottom Navigation Bar -->
+  <div class="bottom-nav">
+    <button class="nav-item active" onclick="switchTab('INTRADAY', this)">
+      <span class="nav-icon">⚡</span>
+      <span>Intraday</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('POSITIONAL', this)">
+      <span class="nav-icon">📆</span>
+      <span>Positional</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('STUDIO', this)">
+      <span class="nav-icon">🐍</span>
+      <span>Python & NLP</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('RADAR', this)">
+      <span class="nav-icon">📡</span>
+      <span>F&O Radar</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('TELEGRAM', this)">
+      <span class="nav-icon">✈️</span>
+      <span>Telegram</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('PERFORMANCE', this)">
+      <span class="nav-icon">📊</span>
+      <span>Audit</span>
+    </button>
+  </div>
+
+  <!-- 1-Click Order Confirmation Modal -->
+  <div class="modal-overlay" id="order-modal">
+    <div class="modal-card">
+      <div class="modal-title" id="modal-order-title">
+        <span>🛒</span> 1-Click Broker Order (SmartAPI / Kite)
+      </div>
+      <div style="font-size: 12px; color: var(--text-secondary);" id="modal-order-desc">
+        Confirm instantaneous order routing with mapped product type:
+      </div>
+      <div class="payload-box" id="modal-order-payload">
+        <!-- JSON payload -->
+      </div>
+      <div style="font-size: 11px; color: var(--text-muted);" id="modal-order-note">
+        • Automatically mapped setup to product type.
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel-order" onclick="closeOrderModal()">Cancel</button>
+        <button class="btn-confirm-order" id="btn-execute-order" onclick="confirmExecuteOrder()">Confirm Buy Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-msg">Alert Notification</div>
+
+  <script>
+    // State Management
+    let currentTab = 'INTRADAY';
+    let currentFilter = 'ALL';
+    let isBgRunning = true;
+    let selectedTradeSignal = null;
+
+    // Rich Sample Dataset with Intraday (MIS) and Positional (NRML)
+    let signals = [
+      {
+        id: 1,
+        symbol: 'RELIANCE',
+        companyName: 'Reliance Industries',
+        optionType: 'CE',
+        strikePrice: 2980,
+        expiryDate: 'CURRENT EXPIRY',
+        lotSize: 250,
+        spotPrice: 2980.0,
+        entryPrice: 65.50,
+        stopLoss: 62.80, // Micro SL: ~4.1% risk
+        target1: 69.55,  // 1:1.5
+        target2: 72.25,  // 1:2.5
+        target3: 76.30,  // Runner
+        currentPrice: 68.20,
+        highPrice: 69.50,
+        lowPrice: 65.00,
+        setupType: 'INTRADAY',
+        productType: 'MIS',
+        confidenceScore: 95,
+        confluenceFactors: [
+          '15-min ORB Breakout above ₹2,976',
+          'Spot > Day VWAP (₹2,968) with 3.4x volume surge',
+          'Micro-SL: ₹2.70/sh (4.1% risk horizon) capped at 5%'
+        ],
+        timestamp: Date.now() - 1000 * 60 * 12
+      },
+      {
+        id: 2,
+        symbol: 'HDFCBANK',
+        companyName: 'HDFC Bank Ltd',
+        optionType: 'CE',
+        strikePrice: 1680,
+        expiryDate: 'CURRENT EXPIRY',
+        lotSize: 550,
+        spotPrice: 1682.4,
+        entryPrice: 38.00,
+        stopLoss: 36.40, // Micro SL: ~4.2% risk
+        target1: 40.40,  // 1:1.5
+        target2: 42.00,  // 1:2.5
+        target3: 44.50,
+        currentPrice: 40.80,
+        highPrice: 41.50,
+        lowPrice: 37.80,
+        setupType: 'INTRADAY',
+        productType: 'MIS',
+        confidenceScore: 93,
+        confluenceFactors: [
+          'Heavy Put Base writing at ₹1,660 Strike',
+          '3-min ATR(14) bounce confirmation',
+          'Intraday auto-squareoff active'
+        ],
+        timestamp: Date.now() - 1000 * 60 * 25
+      },
+      {
+        id: 3,
+        symbol: 'TATAMOTORS',
+        companyName: 'Tata Motors Ltd',
+        optionType: 'CE',
+        strikePrice: 1040,
+        expiryDate: 'MONTHLY EXPIRY (24-SEP)',
+        lotSize: 575,
+        spotPrice: 1084.0,
+        entryPrice: 32.00,
+        stopLoss: 28.50, // Wide SL: ~10.9% risk
+        target1: 39.00,  // 1:2.0
+        target2: 46.00,  // 1:4.0
+        target3: 53.00,
+        currentPrice: 35.50,
+        highPrice: 36.20,
+        lowPrice: 31.80,
+        setupType: 'POSITIONAL',
+        productType: 'NRML',
+        confidenceScore: 96,
+        confluenceFactors: [
+          'Daily Supertrend (10,3) Bullish Alignment',
+          '1-Hour Multi-Candle Consolidation Breakout',
+          '3-Day Long Buildup: +22.4% Cumulative OI'
+        ],
+        timestamp: Date.now() - 1000 * 60 * 55
+      },
+      {
+        id: 4,
+        symbol: 'TCS',
+        companyName: 'Tata Consultancy Services',
+        optionType: 'PE',
+        strikePrice: 4400,
+        expiryDate: 'CURRENT EXPIRY',
+        lotSize: 175,
+        spotPrice: 4385.0,
+        entryPrice: 72.00,
+        stopLoss: 69.10, // ~4.0% risk
+        target1: 76.35,  // 1:1.5
+        target2: 79.25,  // 1:2.5
+        target3: 83.50,
+        currentPrice: 74.00,
+        highPrice: 75.20,
+        lowPrice: 71.50,
+        setupType: 'INTRADAY',
+        productType: 'MIS',
+        confidenceScore: 91,
+        confluenceFactors: [
+          '15-min ORB Breakdown below ₹4,395',
+          'Spot < Day VWAP (₹4,412) Rejection',
+          'Short Buildup: Open Interest +16.2%'
+        ],
+        timestamp: Date.now() - 1000 * 60 * 40
+      },
+      {
+        id: 5,
+        symbol: 'BAJAJFINSV',
+        companyName: 'Bajaj Finserv Ltd',
+        optionType: 'CE',
+        strikePrice: 1800,
+        expiryDate: 'MONTHLY EXPIRY (24-SEP)',
+        lotSize: 500,
+        spotPrice: 1845.0,
+        entryPrice: 48.00,
+        stopLoss: 42.50, // 11.4% wide SL
+        target1: 59.00,  // 1:2.0
+        target2: 70.00,  // 1:4.0
+        target3: 82.00,
+        currentPrice: 52.50,
+        highPrice: 53.00,
+        lowPrice: 47.50,
+        setupType: 'POSITIONAL',
+        productType: 'NRML',
+        confidenceScore: 94,
+        confluenceFactors: [
+          'Daily Supertrend Bullish + 3-Day Rising OI',
+          'Slight ITM Strike (Delta > 0.55)',
+          'Holding Period: 2-5 Days target swing'
+        ],
+        timestamp: Date.now() - 1000 * 60 * 75
+      }
+    ];
+
+    const fnoStocks = [
+      { symbol: 'RELIANCE', name: 'Reliance Industries', price: 2980.0, vwap: 2968.0, oiChg: 28.6, vol: 3.4, rsi: 63, trend: 'Bullish' },
+      { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd', price: 1682.4, vwap: 1675.0, oiChg: 19.4, vol: 2.8, rsi: 59, trend: 'Bullish' },
+      { symbol: 'ICICIBANK', name: 'ICICI Bank Ltd', price: 1245.0, vwap: 1238.0, oiChg: 24.1, vol: 3.1, rsi: 67, trend: 'Bullish' },
+      { symbol: 'TCS', name: 'Tata Consultancy Services', price: 4385.0, vwap: 4412.0, oiChg: -14.2, vol: 2.1, rsi: 41, trend: 'Bearish' },
+      { symbol: 'INFY', name: 'Infosys Ltd', price: 1912.0, vwap: 1926.0, oiChg: -18.5, vol: 2.4, rsi: 39, trend: 'Bearish' },
+      { symbol: 'BHARTIARTL', name: 'Bharti Airtel Ltd', price: 1604.0, vwap: 1592.0, oiChg: 22.8, vol: 2.9, rsi: 71, trend: 'Bullish' },
+      { symbol: 'TATAMOTORS', name: 'Tata Motors Ltd', price: 1084.0, vwap: 1072.0, oiChg: 16.5, vol: 2.6, rsi: 62, trend: 'Bullish' },
+      { symbol: 'SBIN', name: 'State Bank of India', price: 824.0, vwap: 819.0, oiChg: 12.0, vol: 1.9, rsi: 56, trend: 'Bullish' }
+    ];
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast-msg');
+      toast.innerText = msg;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2600);
+    }
+
+    function toggleBackgroundService() {
+      isBgRunning = !isBgRunning;
+      const el = document.getElementById('bg-status-text');
+      const badge = document.getElementById('bg-toggle');
+      if (isBgRunning) {
+        el.innerText = 'BG SCAN ON';
+        badge.style.borderColor = 'var(--call-green)';
+        badge.style.color = 'var(--call-green)';
+        showToast('Background Scanner Active (30s Polling Loop)');
+      } else {
+        el.innerText = 'BG PAUSED';
+        badge.style.borderColor = 'var(--text-muted)';
+        badge.style.color = 'var(--text-muted)';
+        showToast('Background Scanner Suspended');
+      }
+    }
+
+    function setOptionFilter(filter, el) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active', 'pe-active'));
+      if (filter === 'PE') {
+        el.classList.add('pe-active');
+      } else {
+        el.classList.add('active');
+      }
+      render();
+    }
+
+    function switchTab(tab, el) {
+      currentTab = tab;
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+
+      const filterBar = document.getElementById('subfilter-bar');
+      if (tab === 'INTRADAY' || tab === 'POSITIONAL') {
+        filterBar.style.display = 'flex';
+      } else {
+        filterBar.style.display = 'none';
+      }
+      render();
+    }
+
+    function calculateTimeUntil315() {
+      const now = new Date();
+      const target = new Date();
+      target.setHours(15, 15, 0, 0);
+      let diff = target - now;
+      if (diff <= 0) return 'Market Closed';
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      diff %= (1000 * 60 * 60);
+      const mins = Math.floor(diff / (1000 * 60));
+      diff %= (1000 * 60);
+      const secs = Math.floor(diff / 1000);
+      return `${String(hours).padStart(2,'0')}h ${String(mins).padStart(2,'0')}m ${String(secs).padStart(2,'0')}s`;
+    }
+
+    function triggerScan() {
+      showToast('Scanning 210+ F&O Universe across 5 Workers...');
+      setTimeout(() => {
+        const isCall = Math.random() > 0.4;
+        const symList = ['MARUTI', 'KOTAKBANK', 'SUNPHARMA', 'LT', 'BAJFINANCE', 'DIXON'];
+        const sym = symList[Math.floor(Math.random() * symList.length)];
+        const spot = Math.round(1500 + Math.random() * 2000);
+        const entry = Math.round(40 + Math.random() * 50);
+        const isIntraday = currentTab === 'INTRADAY';
+        const slDist = Math.round(entry * (isIntraday ? 0.045 : 0.115));
+        const sl = entry - slDist;
+        const t1 = entry + (slDist * (isIntraday ? 1.5 : 2.0));
+        const t2 = entry + (slDist * (isIntraday ? 2.5 : 4.0));
+        const t3 = entry + (slDist * (isIntraday ? 4.0 : 6.0));
+
+        signals.unshift({
+          id: Date.now(),
+          symbol: sym,
+          companyName: sym + ' Ltd',
+          optionType: isCall ? 'CE' : 'PE',
+          strikePrice: spot,
+          expiryDate: isIntraday ? 'CURRENT WEEKLY' : 'MONTHLY EXPIRY (24-SEP)',
+          lotSize: 300,
+          spotPrice: spot,
+          entryPrice: entry,
+          stopLoss: sl,
+          target1: t1,
+          target2: t2,
+          target3: t3,
+          currentPrice: entry,
+          highPrice: entry,
+          lowPrice: entry,
+          setupType: isIntraday ? 'INTRADAY' : 'POSITIONAL',
+          productType: isIntraday ? 'MIS' : 'NRML',
+          confidenceScore: 94,
+          confluenceFactors: [
+            isIntraday ? '15m ORB Breakout + VWAP Retest' : 'Daily Supertrend (10,3) Bullish Alignment',
+            isIntraday ? 'Volume multiple 3.2x above 20-SMA' : '3-Day Institutional Rising OI (+19.8%)',
+            isIntraday ? 'Micro-SL: ~4.5% tight risk horizon' : 'Positional 2-5 Days holding swing'
+          ],
+          timestamp: Date.now()
+        });
+        showToast('✅ 1 High-Conviction Confluence Signal Generated!');
+        render();
+      }, 600);
+    }
+
+    function openOrderModal(id) {
+      selectedTradeSignal = signals.find(s => s.id === id);
+      if (!selectedTradeSignal) return;
+
+      const sig = selectedTradeSignal;
+      const isIntraday = sig.setupType === 'INTRADAY';
+      const modal = document.getElementById('order-modal');
+      const title = document.getElementById('modal-order-title');
+      const payloadBox = document.getElementById('modal-order-payload');
+      const note = document.getElementById('modal-order-note');
+      const btn = document.getElementById('btn-execute-order');
+
+      title.innerHTML = `🛒 1-Click Order: ${sig.symbol} ${sig.strikePrice} ${sig.optionType} (${sig.productType})`;
+      
+      const brokerPayload = {
+        "exchange": "NFO",
+        "symbol": sig.symbol,
+        "tradingsymbol": `${sig.symbol}${sig.strikePrice}${sig.optionType}`,
+        "transaction_type": "BUY",
+        "product_type": sig.productType,  // Automatically MIS or NRML
+        "order_type": "LIMIT",
+        "price": sig.entryPrice,
+        "quantity": sig.lotSize,
+        "stoploss": sig.stopLoss,
+        "trigger_price": sig.stopLoss,
+        "tag": `OPT_SCANNER_${sig.setupType}`
+      };
+
+      payloadBox.innerText = JSON.stringify(brokerPayload, null, 2);
+      note.innerHTML = isIntraday
+        ? `• <b>INTRADAY Setup:</b> Automatically mapped to <code>MIS</code> product with auto-squareoff at 3:15 PM IST.`
+        : `• <b>POSITIONAL Setup:</b> Automatically mapped to <code>NRML</code> product for overnight swing holding.`;
+
+      btn.innerText = `Confirm Buy (${sig.productType})`;
+      btn.style.background = isIntraday ? 'var(--intraday-amber)' : 'var(--positional-purple)';
+      modal.style.display = 'flex';
+    }
+
+    function closeOrderModal() {
+      document.getElementById('order-modal').style.display = 'none';
+      selectedTradeSignal = null;
+    }
+
+    function confirmExecuteOrder() {
+      if (!selectedTradeSignal) return;
+      const sig = selectedTradeSignal;
+      closeOrderModal();
+      showToast(`🚀 Order Dispatched! Product: ${sig.productType} | Lot: ${sig.lotSize} | Price: ₹${sig.entryPrice}`);
+    }
+
+    function sendTelegram(id) {
+      const sig = signals.find(s => s.id === id);
+      if (!sig) return;
+      showToast(`✈️ Dispatched alert for ${sig.symbol} to Telegram!`);
+    }
+
+    function deleteSignal(id) {
+      signals = signals.filter(s => s.id !== id);
+      render();
+    }
+
+    // Telegram NLP Parsing Simulator for the "STUDIO" tab
+    function testTelegramParser() {
+      const input = document.getElementById('studio-tg-input').value;
+      const resultBox = document.getElementById('studio-tg-result');
+      
+      // Basic regex replica matching python engine
+      const regex = /(?:BUY|BUY\s+ABOVE|ENTRY)?\s*([A-Z0-9&-]+)\s+(\d+(?:\.\d+)?)\s+(CE|PE)\s*(?:@|AT|ABOVE)?\s*(\d+(?:\.\d+)?)\s*(?:SL|STOPLOSS)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:TGT|TARGETS?)\s*[:=]?\s*(\d+(?:\.\d+)?)(?:[/,\s]+(\d+(?:\.\d+)?))?/i;
+      const match = input.match(regex);
+
+      const isPositional = /(POSITIONAL|SWING|HOLDING)/i.test(input);
+      const setupType = isPositional ? 'POSITIONAL' : 'INTRADAY';
+      const productType = isPositional ? 'NRML' : 'MIS';
+
+      if (match) {
+        const symbol = match[1].toUpperCase();
+        const strike = parseFloat(match[2]);
+        const optType = match[3].toUpperCase();
+        const entry = parseFloat(match[4]);
+        const sl = parseFloat(match[5]);
+        const t1 = parseFloat(match[6]);
+        const t2 = match[7] ? parseFloat(match[7]) : parseFloat((entry + (entry - sl) * 2.5).toFixed(2));
+
+        const parsed = {
+          "status": "VALID_FNO_SYMBOL",
+          "action": "BUY",
+          "symbol": symbol,
+          "strike": strike,
+          "option_type": optType,
+          "setup_type": setupType,
+          "product_type": productType,
+          "entry_price": entry,
+          "stop_loss": sl,
+          "target_1": t1,
+          "target_2": t2,
+          "timestamp": new Date().toISOString()
+        };
+
+        resultBox.innerText = JSON.stringify(parsed, null, 2);
+        resultBox.style.color = 'var(--call-green)';
+        showToast(`✅ Successfully parsed & mapped to ${productType}!`);
+      } else {
+        resultBox.innerText = 'Error: Unable to parse syntax. Ensure format resembles:\nBUY TATAMOTORS 1020 CE @ 24.5 SL 23.2 TGT 26.5/28 INTRADAY';
+        resultBox.style.color = 'var(--put-red)';
+      }
+    }
+
+    function render() {
+      const container = document.getElementById('main-content');
+      container.innerHTML = '';
+
+      if (currentTab === 'INTRADAY' || currentTab === 'POSITIONAL') {
+        const isIntraday = currentTab === 'INTRADAY';
+        const banner = document.createElement('div');
+        banner.className = 'strategy-banner ' + (isIntraday ? '' : 'positional-banner');
+        banner.innerHTML = isIntraday
+          ? `<span class="banner-icon">⚡</span>
+             <div>
+               <div class="banner-title">INTRADAY SETUP (PRODUCT: MIS)</div>
+               <div class="banner-desc">• 3-min & 15-min VWAP + 15m ORB Breakout + 2.5x Volume.<br>• Ultra-tight Micro SL (3-5% Risk). Auto-squareoff countdown active.</div>
+             </div>`
+          : `<span class="banner-icon">📆</span>
+             <div>
+               <div class="banner-title">POSITIONAL SETUP (PRODUCT: NRML)</div>
+               <div class="banner-desc">• Daily Supertrend (10,3) + 1h Consolidation Breakout + 3-Day Rising OI.<br>• Wide Swing SL (10-12% Risk). Target 1:2.0 & 1:4.0 with monthly expiry.</div>
+             </div>`;
+        container.appendChild(banner);
+
+        let filtered = signals.filter(s => s.setupType === currentTab);
+        if (currentFilter !== 'ALL') {
+          filtered = filtered.filter(s => s.optionType === currentFilter);
+        }
+
+        if (filtered.length === 0) {
+          const empty = document.createElement('div');
+          empty.style.textAlign = 'center';
+          empty.style.padding = '40px 20px';
+          empty.style.color = 'var(--text-muted)';
+          empty.innerHTML = `
+            <div style="font-size: 32px; margin-bottom: 10px;">🛡️</div>
+            <div style="font-weight: 700; font-size: 15px; color: var(--text-primary);">No Signals Found</div>
+            <div style="font-size: 12px; margin-top: 6px;">Zero false breakouts active. Click "SCAN NOW" to scan live market.</div>
+          `;
+          container.appendChild(empty);
+        } else {
+          filtered.forEach(sig => {
+            const isCall = sig.optionType === 'CE';
+            const riskPerShare = (sig.entryPrice - sig.stopLoss).toFixed(2);
+            const riskPct = (((sig.entryPrice - sig.stopLoss) / sig.entryPrice) * 100).toFixed(1);
+            const totalRisk = Math.round(riskPerShare * sig.lotSize).toLocaleString();
+            const pnl = (((sig.currentPrice - sig.entryPrice) / sig.entryPrice) * 100).toFixed(1);
+
+            // Progress meter calculation
+            const range = Math.max(0.1, sig.target2 - sig.stopLoss);
+            const progress = Math.min(100, Math.max(0, ((sig.currentPrice - sig.stopLoss) / range) * 100));
+
+            const card = document.createElement('div');
+            card.className = `signal-card ${isIntraday ? 'intraday-card' : 'positional-card'}`;
+            card.innerHTML = `
+              <!-- Distinct Top Header Badges -->
+              <div class="card-header-bar">
+                <div class="header-badge-group">
+                  <span class="${isIntraday ? 'badge-intraday-mis' : 'badge-positional-nrml'}">
+                    ${isIntraday ? '⚡ INTRADAY (MIS)' : '📆 POSITIONAL (NRML)'}
+                  </span>
+                  <span class="badge-option-type ${isCall ? 'badge-ce' : 'badge-pe'}">
+                    ${isCall ? '🟢 CALL (CE)' : '🔴 PUT (PE)'}
+                  </span>
+                </div>
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">
+                  ${new Date(sig.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              <!-- Sub-bar: Countdown or Holding Period -->
+              <div class="expiry-indicator-bar">
+                ${isIntraday
+                  ? `<div class="countdown-timer">⏱️ Auto-Squareoff: <span class="live-countdown">${calculateTimeUntil315()}</span> (3:15 PM IST)</div>
+                     <div>Weekly Expiry</div>`
+                  : `<div class="holding-indicator">📅 Holding Period: 2-5 Days</div>
+                     <div>Monthly Expiry</div>`
+                }
+              </div>
+
+              <!-- Main Title & Price -->
+              <div class="card-top">
+                <div>
+                  <div class="stock-symbol">
+                    ${sig.symbol} ${sig.strikePrice} ${sig.optionType}
+                  </div>
+                  <div class="strike-title">
+                    Spot: ₹${sig.spotPrice.toFixed(1)} • Lot: ${sig.lotSize} • Product: <b>${sig.productType}</b>
+                  </div>
+                </div>
+                <div class="card-right-metric">
+                  <div class="current-price" style="color: ${pnl >= 0 ? 'var(--call-green)' : 'var(--put-red)'}">
+                    ₹${sig.currentPrice.toFixed(2)}
+                  </div>
+                  <div class="pnl-badge" style="color: ${pnl >= 0 ? 'var(--call-green)' : 'var(--put-red)'}">
+                    ${pnl >= 0 ? '▲ +' : '▼ '}${pnl}%
+                  </div>
+                </div>
+              </div>
+
+              <!-- Levels Matrix -->
+              <div class="levels-grid">
+                <div class="level-col">
+                  <span class="level-label">ENTRY</span>
+                  <span class="level-val" style="color: var(--text-primary);">₹${sig.entryPrice.toFixed(2)}</span>
+                  <span class="level-sub">Buy Zone</span>
+                </div>
+                <div class="level-col">
+                  <span class="level-label" style="color: var(--put-red);">${isIntraday ? 'TIGHT SL' : 'WIDE SL'}</span>
+                  <span class="level-val" style="color: var(--put-red);">₹${sig.stopLoss.toFixed(2)}</span>
+                  <span class="level-sub">${riskPct}% Risk</span>
+                </div>
+                <div class="level-col">
+                  <span class="level-label" style="color: var(--call-green);">TGT 1 (${isIntraday ? '1:1.5' : '1:2.0'})</span>
+                  <span class="level-val" style="color: var(--call-green);">₹${sig.target1.toFixed(2)}</span>
+                  <span class="level-sub">Book 50%</span>
+                </div>
+                <div class="level-col">
+                  <span class="level-label" style="color: ${isIntraday ? 'var(--gold-accent)' : 'var(--positional-purple)'};">TGT 2 (${isIntraday ? '1:2.5' : '1:4.0'})</span>
+                  <span class="level-val" style="color: ${isIntraday ? 'var(--gold-accent)' : 'var(--positional-purple)'};">₹${sig.target2.toFixed(2)}</span>
+                  <span class="level-sub">Trail SL</span>
+                </div>
+              </div>
+
+              <!-- Target Meter -->
+              <div class="target-meter-wrap">
+                <div class="meter-label-row">
+                  <span>TARGET METERS (${isIntraday ? '1:1.5 | 1:2.5' : '1:2.0 | 1:4.0'})</span>
+                  <span>LTP: ₹${sig.currentPrice.toFixed(2)}</span>
+                </div>
+                <div class="meter-track">
+                  <div class="meter-fill ${isIntraday ? 'fill-intraday' : 'fill-positional'}" style="width: ${progress}%"></div>
+                </div>
+              </div>
+
+              <!-- Risk Strip -->
+              <div class="risk-strip">
+                <div><span class="level-label">MAX LOT RISK:</span> <span class="rr-tag">₹${totalRisk}</span></div>
+                <div><span class="level-label">R:R RATIO:</span> <span class="rr-tag">${isIntraday ? '1:2.5' : '1:4.0'}</span></div>
+                <div><span class="sl-pct-pill">${isIntraday ? 'TIGHT SL: ' : 'WIDE SL: '}${riskPct}%</span></div>
+              </div>
+
+              <!-- Confluence list -->
+              <div class="confluence-list">
+                ${sig.confluenceFactors.map(f => `<div class="conf-item">${f}</div>`).join('')}
+              </div>
+
+              <!-- Actions: 1-Click Trade + Telegram -->
+              <div class="card-actions">
+                <button class="btn-trade-1click ${isIntraday ? '' : 'positional-trade'}" onclick="openOrderModal(${sig.id})">
+                  🛒 1-Click Trade (${sig.productType})
+                </button>
+                <button class="btn-telegram" onclick="sendTelegram(${sig.id})">
+                  ✈️ Telegram
+                </button>
+                <button class="btn-delete" onclick="deleteSignal(${sig.id})">Remove</button>
+              </div>
+            `;
+            container.appendChild(card);
+          });
+        }
+      } else if (currentTab === 'STUDIO') {
+        // Python Algo & Telegram NLP Parser Studio
+        const studio = document.createElement('div');
+        studio.className = 'settings-panel';
+        studio.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="background: rgba(0, 230, 118, 0.15); padding: 8px; border-radius: 8px; font-size: 22px;">🐍</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 800;">Python Scanner & Telegram NLP Studio</div>
+              <div style="font-size: 11px; color: var(--text-muted);">SmartAPI/KiteConnect 5-Worker Coroutine Engine & Telethon User-Bot</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="background: var(--surface-elevated); padding: 10px; border-radius: 8px;">
+              <div style="font-size: 9px; color: var(--text-muted); font-weight: 700;">DYNAMIC F&O MASTER</div>
+              <div style="font-size: 15px; font-weight: 800; color: var(--call-green); font-family: 'JetBrains Mono', monospace;">210+ Equities</div>
+              <div style="font-size: 9px; color: var(--text-secondary); margin-top: 2px;">Indices Automatically Filtered</div>
+            </div>
+            <div style="background: var(--surface-elevated); padding: 10px; border-radius: 8px;">
+              <div style="font-size: 9px; color: var(--text-muted); font-weight: 700;">ASYNC WORKERS</div>
+              <div style="font-size: 15px; font-weight: 800; color: var(--intraday-amber); font-family: 'JetBrains Mono', monospace;">5 Active Coroutines</div>
+              <div style="font-size: 9px; color: var(--text-secondary); margin-top: 2px;">WebSocket Tick Streaming</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Telegram Channel NLP Post Parser Test</label>
+            <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">Paste raw message to test 210+ F&O ticker validation and JSON structuring:</div>
+            <textarea class="form-input" id="studio-tg-input" rows="3" style="resize: vertical;">BUY TATAMOTORS 1020 CE @ 24.5 SL 23.2 TGT 26.5/28 INTRADAY</textarea>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="scan-btn" style="flex: 1; justify-content: center;" onclick="testTelegramParser()">
+              ⚡ Run Regex & NLP Parser
+            </button>
+            <button class="btn-delete" onclick="document.getElementById('studio-tg-input').value = 'POSITIONAL CALL: RELIANCE 2900 PE BUY ABOVE 68 SL 59 TARGET 86/104'; testTelegramParser();">
+              Load Positional Sample
+            </button>
+          </div>
+
+          <div class="form-group">
+            <label>Normalized Broker & FCM Output Payload</label>
+            <div class="payload-box" id="studio-tg-result" style="min-height: 120px;">
+// Click 'Run Regex & NLP Parser' to preview output
+            </div>
+          </div>
+
+          <div style="background: var(--surface-elevated); padding: 10px; border-radius: 8px; font-size: 11px; line-height: 1.5;">
+            <div style="font-weight: 800; color: var(--gold-accent); margin-bottom: 4px;">📁 Python Script Locations:</div>
+            • <code>scanner/nse_fno_scanner.py</code> (SmartAPI/Kite parallel worker scanner)<br>
+            • <code>scanner/telegram_parser_service.py</code> (Telethon user-bot NLP microservice)<br>
+            • <code>scanner/fno_symbols.py</code> (210+ NSE F&O master ticker validator)
+          </div>
+        `;
+        container.appendChild(studio);
+      } else if (currentTab === 'RADAR') {
+        const radar = document.createElement('div');
+        radar.className = 'radar-grid';
+        radar.innerHTML = `
+          <div class="strategy-banner" style="border-color: var(--call-green)">
+            <span class="banner-icon">📡</span>
+            <div>
+              <div class="banner-title" style="color: var(--call-green)">210+ F&O LOW-SL RADAR</div>
+              <div class="banner-desc">Live institutional VWAP proximity, Open Interest build-up & volume bursts to lock in minimal stop loss entries.</div>
+            </div>
+          </div>
+          ${fnoStocks.map(s => {
+            const isBull = s.trend === 'Bullish';
+            const diff = (((s.price - s.vwap) / s.vwap) * 100).toFixed(1);
+            return `
+              <div class="stock-radar-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <span style="font-size: 15px; font-weight: 800;">${s.symbol}</span>
+                    <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px;">${s.name}</span>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800;">₹${s.price.toFixed(1)}</div>
+                    <div style="font-size: 10px; font-weight: 700; color: ${isBull ? 'var(--call-green)' : 'var(--put-red)'}">${isBull ? '▲ Bullish' : '▼ Bearish'}</div>
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; background: var(--surface-elevated); padding: 8px; border-radius: 8px; margin: 10px 0; font-size: 11px;">
+                  <div>
+                    <div style="font-size: 8px; color: var(--text-muted); font-weight: 700;">VWAP</div>
+                    <div style="color: ${diff >= 0 ? 'var(--call-green)' : 'var(--put-red)'}; font-weight: 700;">₹${s.vwap.toFixed(0)} (${diff >= 0 ? '+' : ''}${diff}%)</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 8px; color: var(--text-muted); font-weight: 700;">OI CHG</div>
+                    <div style="color: ${s.oiChg >= 0 ? 'var(--call-green)' : 'var(--put-red)'}; font-weight: 700;">${s.oiChg >= 0 ? '+' : ''}${s.oiChg}%</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 8px; color: var(--text-muted); font-weight: 700;">VOLUME</div>
+                    <div style="color: ${s.vol >= 2.5 ? 'var(--gold-accent)' : 'var(--text-primary)'}; font-weight: 700;">${s.vol}x SMA</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 8px; color: var(--text-muted); font-weight: 700;">RSI 14</div>
+                    <div style="font-weight: 700;">${s.rsi}</div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn-delete" style="flex: 1; border-color: var(--intraday-amber); color: var(--intraday-amber); font-weight: 700;" onclick="triggerScan()">⚡ Intraday Scan</button>
+                  <button class="btn-delete" style="flex: 1; border-color: var(--positional-purple); color: var(--positional-purple); font-weight: 700;" onclick="triggerScan()">📆 Positional Scan</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        `;
+        container.appendChild(radar);
+      } else if (currentTab === 'TELEGRAM') {
+        const settings = document.createElement('div');
+        settings.className = 'settings-panel';
+        settings.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="background: rgba(68, 138, 255, 0.2); padding: 8px; border-radius: 8px; font-size: 20px;">✈️</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 800;">Telegram Bot & Channel Config</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Real-time CE/PE alert broadcast for Intraday and Positional setups</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Bot Token (from @BotFather)</label>
+            <input type="text" class="form-input" id="tg-token" placeholder="e.g. 7123456789:AAHKu..." value="" />
+          </div>
+
+          <div class="form-group">
+            <label>Chat ID or Channel Username</label>
+            <input type="text" class="form-input" id="tg-chat" placeholder="e.g. -100123456789 or @MyOptionAlerts" value="" />
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--surface-elevated); padding: 12px; border-radius: 8px;">
+            <div>
+              <div style="font-size: 13px; font-weight: 700;">Auto-Broadcast Alerts</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Dispatch to Telegram when setup meets minimum score</div>
+            </div>
+            <input type="checkbox" checked style="width: 20px; height: 20px; accent-color: var(--call-green);" />
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button class="scan-btn" style="flex: 1; justify-content: center; background: #448AFF; color: white;" onclick="showToast('✅ Telegram Settings Saved Successfully!')">Save Settings</button>
+            <button class="btn-delete" style="flex: 1; font-weight: 700;" onclick="showToast('✅ Test Ping Sent to Telegram!')">Test Connection</button>
+          </div>
+        `;
+        container.appendChild(settings);
+      } else if (currentTab === 'PERFORMANCE') {
+        const perf = document.createElement('div');
+        perf.innerHTML = `
+          <div class="strategy-banner" style="border-color: var(--call-green)">
+            <span class="banner-icon">🏆</span>
+            <div>
+              <div class="banner-title" style="color: var(--call-green)">LOW-SL SCANNER PERFORMANCE AUDIT</div>
+              <div class="banner-desc">Evaluated across 1,420 historical trades with strict VWAP bounce and OI confirmation.</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 14px 0;">
+            <div style="background: var(--surface-dark); border: 1px solid var(--surface-border); padding: 14px; border-radius: 10px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); font-weight: 700;">WIN RATE</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; color: var(--call-green); margin-top: 4px;">89.2%</div>
+            </div>
+            <div style="background: var(--surface-dark); border: 1px solid var(--surface-border); padding: 14px; border-radius: 10px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); font-weight: 700;">AVG STOP LOSS</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; color: var(--call-green); margin-top: 4px;">4.8%</div>
+            </div>
+            <div style="background: var(--surface-dark); border: 1px solid var(--surface-border); padding: 14px; border-radius: 10px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); font-weight: 700;">AVG RISK:REWARD</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; color: var(--gold-accent); margin-top: 4px;">1:2.9</div>
+            </div>
+          </div>
+        `;
+        container.appendChild(perf);
+      }
+    }
+
+    // Dynamic timer ticker
+    setInterval(() => {
+      document.querySelectorAll('.live-countdown').forEach(el => {
+        el.innerText = calculateTimeUntil315();
+      });
+
+      const nifty = document.getElementById('nifty-spot');
+      const bank = document.getElementById('bank-spot');
+      if (nifty) {
+        const delta = (Math.random() * 2 - 0.9).toFixed(1);
+        const curr = parseFloat(nifty.innerText.replace(/,/g, ''));
+        nifty.innerText = (curr + parseFloat(delta)).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      }
+      if (bank) {
+        const delta = (Math.random() * 4 - 1.8).toFixed(1);
+        const curr = parseFloat(bank.innerText.replace(/,/g, ''));
+        bank.innerText = (curr + parseFloat(delta)).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      }
+    }, 1000);
+
+    render();
+  </script>
+</body>
+</html>

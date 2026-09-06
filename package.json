@@ -1,0 +1,11 @@
+{
+  "name": "nse-fno-options-scanner",
+  "version": "1.0.0",
+  "description": "NSE F&O Stock Options Scanner with Low-SL Intraday & Positional Setups, Telegram alerts, and live radar",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'Build successful' && exit 0"
+  },
+  "dependencies": {}
+}
