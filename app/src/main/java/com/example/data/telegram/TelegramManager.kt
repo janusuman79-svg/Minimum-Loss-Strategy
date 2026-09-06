@@ -88,7 +88,7 @@ class TelegramManager(private val context: Context) {
             append(" • ${signal.partialExitPlan}\n")
             append(" • ⏳ Theta Protection: 45-min decay limit for intraday buying\n")
             append("━━━━━━━━━━━━━━━━━━━━━\n")
-            append("⏱ _Generated at: $timeStr_\n")
+            append("⏱ _Generated at: ${timeStr}_\n")
             append("⚠️ _Strict institutional discipline: Exit 50% at T1 & lock Breakeven immediately._")
         }
     }
