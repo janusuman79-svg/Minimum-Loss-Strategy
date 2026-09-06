@@ -12,6 +12,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 import java.util.concurrent.TimeUnit
 
 data class IndexQuote(
@@ -67,15 +69,22 @@ class UpstoxMarketData(private val context: Context) {
         fun indexQuote(key: String): IndexQuote? {
             val quote = quotesByKey[key] ?: return null
             val last = quote.optDouble("last_price", Double.NaN)
+            val apiChange = quote.optDouble("net_change", Double.NaN)
             val close = quote.optJSONObject("ohlc")?.optDouble("close", Double.NaN) ?: Double.NaN
             if (!last.isFinite() || last <= 0.0) return null
-            val change = if (close.isFinite() && close > 0.0) last - close else 0.0
-            return IndexQuote(last, change, if (close > 0.0) change * 100.0 / close else 0.0)
+            val change = when {
+                apiChange.isFinite() -> apiChange
+                close.isFinite() && close > 0.0 -> last - close
+                else -> 0.0
+            }
+            val previousClose = last - change
+            return IndexQuote(last, change, if (previousClose > 0.0) change * 100.0 / previousClose else 0.0)
         }
 
-        val updatedStocks = baseStocks.map { stock ->
-            val quote = quotesByKey[stock.instrumentKey] ?: return@map stock
-            val last = quote.optDouble("last_price", stock.spotPrice)
+        val updatedStocks = baseStocks.mapNotNull { stock ->
+            val quote = quotesByKey[stock.instrumentKey] ?: return@mapNotNull null
+            val last = quote.optDouble("last_price", Double.NaN)
+            if (!last.isFinite() || last <= 0.0) return@mapNotNull null
             val average = quote.optDouble("average_price", last).takeIf { it > 0.0 } ?: last
             val buyQty = quote.optDouble("total_buy_quantity", 0.0)
             val sellQty = quote.optDouble("total_sell_quantity", 0.0)
@@ -105,16 +114,39 @@ class UpstoxMarketData(private val context: Context) {
     }
 
     suspend fun attachLiveOptionPrice(signal: TradeSignal, underlyingKey: String): TradeSignal = withContext(Dispatchers.IO) {
-        val expiry = if (signal.setupType == SetupType.INTRADAY) "current_week" else "current_month"
         val contractsUrl = "https://api.upstox.com/v2/option/contract".toHttpUrl().newBuilder()
             .addQueryParameter("instrument_key", underlyingKey)
-            .addQueryParameter("expiry_date", expiry).build().toString()
+            .build().toString()
         val contracts = execute(contractsUrl).getJSONArray("data")
         val wantedType = signal.optionType.name
-        val matches = (0 until contracts.length()).map { contracts.getJSONObject(it) }
-            .filter { it.optString("instrument_type").equals(wantedType, true) }
-        val contract = matches.minByOrNull { kotlin.math.abs(it.optDouble("strike_price") - signal.strikePrice) }
-            ?: error("No $wantedType option contract returned by Upstox")
+        val today = LocalDate.now()
+        val allContracts = (0 until contracts.length()).map { contracts.getJSONObject(it) }
+            .filter { contract ->
+                val instrumentType = contract.optString("instrument_type")
+                val optionType = contract.optString("option_type")
+                val symbol = contract.optString("trading_symbol")
+                instrumentType.equals(wantedType, true) || optionType.equals(wantedType, true) ||
+                    symbol.endsWith(wantedType, ignoreCase = true)
+            }
+            .mapNotNull { contract ->
+                val date = try { LocalDate.parse(contract.optString("expiry")) }
+                catch (_: DateTimeParseException) { null }
+                if (date == null || date.isBefore(today)) null else contract to date
+            }
+        check(allContracts.isNotEmpty()) { "No active $wantedType option contracts available for ${signal.symbol}" }
+
+        val expiries = allContracts.map { it.second }.distinct().sorted()
+        val selectedExpiry = if (signal.setupType == SetupType.INTRADAY) {
+            expiries.first()
+        } else {
+            val first = expiries.first()
+            expiries.filter { it.year == first.year && it.month == first.month }.maxOrNull() ?: first
+        }
+        val contract = allContracts.asSequence()
+            .filter { it.second == selectedExpiry }
+            .map { it.first }
+            .minByOrNull { kotlin.math.abs(it.optDouble("strike_price") - signal.strikePrice) }
+            ?: error("No $wantedType contract found for $selectedExpiry")
         val optionKey = contract.getString("instrument_key")
         val quoteUrl = "https://api.upstox.com/v2/market-quote/quotes".toHttpUrl().newBuilder()
             .addQueryParameter("instrument_key", optionKey).build().toString()
