@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">NSE F&amp;O Options Scanner</string>
+    <string name="scanner_channel_name">NSE Options Scanner Alerts</string>
+    <string name="scanner_channel_description">Notifications for high conviction CE/PE option trading signals</string>
+    <string name="foreground_channel_name">Scanner Background Service</string>
+    <string name="foreground_channel_description">Keeps the F&amp;O scanner active in background</string>
+</resources>
